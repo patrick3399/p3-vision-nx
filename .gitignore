@@ -1,0 +1,54 @@
+# Build artifacts
+build/
+build-*/
+out/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.o
+*.obj
+*.so
+*.dll
+*.dylib
+*.a
+*.lib
+*.exe
+
+# NX Metadata SDK — large, separately licensed, download per SDK_PIN.txt
+third_party/
+metadata_sdk/
+
+# Python runtime
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+venv/
+.venv/
+env/
+
+# Models — too large for git, distribute separately
+*.pt
+*.onnx
+*.engine
+*.xml
+*.bin
+*_openvino_model/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Local debug artifacts
+frame_*.jpg
+*.log
+core
+core.*

@@ -1,0 +1,23 @@
+# All text files committed with LF; checkout preserves LF regardless of
+# core.autocrlf on the dev machine. Required because .sh / .py / .cpp are
+# consumed by the Linux mediaserver, where CRLF breaks shebangs + compile.
+
+* text=auto eol=lf
+
+*.sh        text eol=lf
+*.py        text eol=lf
+*.cpp       text eol=lf
+*.h         text eol=lf
+*.txt       text eol=lf
+*.md        text eol=lf
+CMakeLists.txt text eol=lf
+.gitignore  text eol=lf
+.gitattributes text eol=lf
+LICENSE     text eol=lf
+
+# Binary
+*.png       binary
+*.jpg       binary
+*.onnx      binary
+*.pt        binary
+*.engine    binary

@@ -1,0 +1,19 @@
+Mozilla Public License Version 2.0
+==================================
+
+This project is licensed under the Mozilla Public License 2.0 (MPL-2.0).
+
+Full license text:
+    https://www.mozilla.org/en-US/MPL/2.0/
+
+MPL-2.0 is a file-level copyleft license. Modifications to files originally
+covered by MPL (in this repo, files derived from Network Optix's Metadata
+SDK sample_analytics_plugin, marked "Copyright 2018-present Network Optix,
+Inc.") must retain their MPL notice and be made available in source form.
+
+New files authored for this project (marked "Copyright 2026 Patrick3399")
+are also released under MPL-2.0 for consistency. You may use this plugin
+in commercial, closed-source products; only modifications to MPL-covered
+files themselves must be published.
+
+SPDX-License-Identifier: MPL-2.0

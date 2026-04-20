@@ -1,0 +1,24 @@
+NX Metadata SDK pinned version
+==============================
+
+Version:      6.0.1.39873
+Target VMS:   Nx Witness / NxVMS / CN-edition 6.1.1.42624
+
+Download (public update server):
+  https://updates.networkoptix.com/metavms/6.1.1.42624/sdk/metavms-metadata_sdk-6.0.1.39873-universal.zip
+
+After download, verify against the mediaserver's expected SDK version and
+unpack to a directory of your choice (not inside this repo — .gitignored).
+Pass the path to CMake:
+
+  cmake -S . -B build -DmetadataSdkDir=/path/to/unpacked/metadata_sdk \
+        -DCMAKE_BUILD_TYPE=Release
+
+The SDK zip is NOT vendored in this repo because:
+  1. It's large (~15 MB compressed, ~60 MB unpacked).
+  2. It is distributed under Network Optix's own terms (not MPL).
+  3. Pinning by version + URL is safer than pinning by git submodule
+     (NX's sample plugin repo has no 6.x branch; it tracks 5.x).
+
+If NX updates the mediaserver to a new 6.x patch version, download the
+SDK zip matching that new version and update this file.
