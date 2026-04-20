@@ -39,9 +39,18 @@ SDK_PIN.txt                                  pinned NX Metadata SDK version + UR
 | --- | --- | --- |
 | `/opt/networkoptix/mediaserver/bin/plugins/p3_vision_nx/libp3_vision_nx.so` | `networkoptix` | plugin library loaded by mediaserver |
 | `/opt/p3-vision-nx/python/*.py`     | `networkoptix` | worker + adapters |
-| `/opt/p3-vision-nx/venv/`            | `networkoptix` | isolated Python environment (onnxruntime, openvino, ultralytics, etc.) |
+| `/opt/p3-vision-nx/venv/`            | `networkoptix` | isolated Python environment (onnxruntime, openvino, etc.) |
+| `/etc/systemd/system/p3-vision-nx-worker.service` | `root` | persistent worker unit (installed by deploy.sh) |
+| `/run/p3-vision-nx/`                 | `networkoptix` | runtime dir, created by systemd `RuntimeDirectory=` |
 | `/run/p3-vision-nx/worker_default.sock` | `networkoptix` | AF_UNIX socket between C++ DeviceAgent and Python worker |
 | `/var/lib/p3-vision-nx/models/`     | `networkoptix` | user-supplied `.pt` / `.onnx` / `.engine` files |
+
+The worker runs as a dedicated systemd service (`p3-vision-nx-worker`)
+under the `networkoptix` user. `deploy.sh` installs the unit,
+`daemon-reload`s, enables it, and orchestrates the
+worker-before-mediaserver start order so the AF_UNIX socket exists by
+the time the C++ DeviceAgent first connects. Tail it with
+`journalctl -u p3-vision-nx-worker -f`.
 
 ---
 

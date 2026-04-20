@@ -1,0 +1,28 @@
+[Unit]
+Description=p3-vision-nx inference worker
+Documentation=https://github.com/patrick3399/p3-vision-nx
+After=network.target
+
+[Service]
+Type=simple
+User=networkoptix
+Group=networkoptix
+
+# systemd creates /run/p3-vision-nx with this ownership + mode before ExecStart
+# runs, so worker.py can bind the AF_UNIX socket without needing to mkdir under
+# /run/ (which networkoptix has no permission to do).
+RuntimeDirectory=p3-vision-nx
+RuntimeDirectoryMode=0755
+
+ExecStart=/opt/p3-vision-nx/venv/bin/python3 /opt/p3-vision-nx/python/worker.py
+
+Restart=on-failure
+RestartSec=2
+
+# Match nxai_plugin resource expectations on a modest mediaserver host.
+# Raise if you run multiple cameras with heavyweight models (YOLOv8m+).
+MemoryHigh=2G
+MemoryMax=4G
+
+[Install]
+WantedBy=multi-user.target
