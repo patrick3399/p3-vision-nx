@@ -300,6 +300,38 @@ std::string DeviceAgent::manifestString() const
     return os.str();
 }
 
+nx::sdk::Uuid DeviceAgent::resolveTrackUuid(int tid, bool* outIsNew)
+{
+    // O(1) hit path: move the entry to the MRU end and return its UUID.
+    auto it = m_trackUuids.find(tid);
+    if (it != m_trackUuids.end())
+    {
+        m_trackUuidLru.splice(m_trackUuidLru.begin(), m_trackUuidLru, it->second);
+        if (outIsNew) *outIsNew = false;
+        return it->second->uuid;
+    }
+
+    // Miss: allocate a fresh UUID, insert at the MRU end.
+    TrackUuidEntry entry{tid, UuidHelper::randomUuid()};
+    m_trackUuidLru.push_front(entry);
+    m_trackUuids.emplace(tid, m_trackUuidLru.begin());
+    if (outIsNew) *outIsNew = true;
+
+    // Evict from the LRU tail until we fit inside the cap. Worker tracker
+    // IDs are monotonically increasing per connection, so any evicted
+    // entry is almost certainly dead on the worker side too — the risk
+    // of evicting a still-live track is bounded by "more than kTrackUuidCap
+    // concurrent tracks in a single camera," which doesn't happen in any
+    // realistic scene.
+    while (m_trackUuidLru.size() > kTrackUuidCap)
+    {
+        const TrackUuidEntry& victim = m_trackUuidLru.back();
+        m_trackUuids.erase(victim.tid);
+        m_trackUuidLru.pop_back();
+    }
+    return entry.uuid;
+}
+
 void DeviceAgent::sendConfigToWorker()
 {
     if (!m_ipc)
@@ -340,6 +372,15 @@ void DeviceAgent::sendConfigToWorker()
     if (runtime.empty()) runtime = "onnx";
     if (device.empty())  device  = "cpu";
 
+    // Snapshot tracker settings too (same mutex as above covered them).
+    int trackMaxAge;
+    std::string trackClassMatch;
+    {
+        std::lock_guard<std::mutex> lock(m_settingsMutex);
+        trackMaxAge = m_trackMaxAge;
+        trackClassMatch = m_trackClassMatch;
+    }
+
     nx::kit::Json::object extra;
     extra["model_path"] = modelPath;
     extra["conf"] = conf;
@@ -348,6 +389,8 @@ void DeviceAgent::sendConfigToWorker()
     extra["runtime"] = runtime;
     extra["device"] = device;
     extra["worker_count"] = workerCount;
+    extra["track_max_age"] = trackMaxAge;
+    extra["track_class_match"] = trackClassMatch;
 
     // `classes` is a tri-state on the wire:
     //   absent      — user never touched the CheckBoxGroup (or parse failed)
@@ -410,7 +453,9 @@ void DeviceAgent::sendConfigToWorker()
              << " classes=" << classesSummary
              << " roi=" << roi.size()
              << " incl=" << inclusiveMask.size()
-             << " excl=" << exclusiveMask.size();
+             << " excl=" << exclusiveMask.size()
+             << " trackMaxAge=" << trackMaxAge
+             << " trackClassMatch=" << trackClassMatch;
 }
 
 void DeviceAgent::onEngineConfigChanged()
@@ -505,17 +550,9 @@ bool DeviceAgent::pushUncompressedVideoFrame(const IUncompressedVideoFrame* vide
             const int tid = static_cast<int>(box["track_id"].number_value());
             if (tid > 0)
             {
-                auto it = m_trackUuids.find(tid);
-                if (it == m_trackUuids.end())
-                {
-                    uuid = UuidHelper::randomUuid();
-                    m_trackUuids.emplace(tid, uuid);
-                    ++newUuidsThisPacket;
-                }
-                else
-                {
-                    uuid = it->second;
-                }
+                bool isNew = false;
+                uuid = resolveTrackUuid(tid, &isNew);
+                if (isNew) ++newUuidsThisPacket;
                 uuidResolved = true;
             }
         }
@@ -574,6 +611,18 @@ Result<const ISettingsResponse*> DeviceAgent::settingsReceived()
     int frameSkip = parseInt(settingValue("frameSkip"), 1);
     std::string runtime = settingValue("runtime");
     std::string device  = settingValue("device");
+    // Tracker params. Manifest clamps trackMaxAge to [10, 300]; we clamp
+    // again defensively because a future manifest tweak or an edited
+    // persisted value could sneak an out-of-range integer through.
+    int trackMaxAge = parseInt(settingValue("trackMaxAge"), 90);
+    if (trackMaxAge < 10) trackMaxAge = 10;
+    if (trackMaxAge > 300) trackMaxAge = 300;
+    std::string trackClassMatch = settingValue("trackClassMatch");
+    if (trackClassMatch != "strict" && trackClassMatch != "vehicle_group"
+        && trackClassMatch != "any")
+    {
+        trackClassMatch = "vehicle_group";
+    }
 
     // CheckBoxGroup -> stringified JSON array. Empty / invalid string means
     // we won't send a `classes` key at all (worker defaults to "emit all").
@@ -607,6 +656,8 @@ Result<const ISettingsResponse*> DeviceAgent::settingsReceived()
         m_conf = conf;
         m_iou = iou;
         m_frameSkip = frameSkip;
+        m_trackMaxAge = trackMaxAge;
+        m_trackClassMatch = trackClassMatch;
         m_runtime = runtime;
         m_device = device;
         m_classes = classesParsed;
@@ -625,7 +676,9 @@ Result<const ISettingsResponse*> DeviceAgent::settingsReceived()
              << " classesSet=" << (classesSet ? 1 : 0)
              << " roiPts=" << roiPts
              << " inclPts=" << inclPts
-             << " exclPts=" << exclPts;
+             << " exclPts=" << exclPts
+             << " trackMaxAge=" << trackMaxAge
+             << " trackClassMatch=" << trackClassMatch;
 
     sendConfigToWorker();
     return nullptr;

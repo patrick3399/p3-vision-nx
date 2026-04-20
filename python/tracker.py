@@ -13,6 +13,18 @@ Why not scipy.optimize.linear_sum_assignment (Hungarian)?
   tracks, so O(N*M) greedy matching runs in microseconds and we avoid a
   scipy dependency (the worker venv stays ~150 MB).
 
+Class-match modes:
+  "strict"         — detection only matches a track with identical COCO
+                     class id. Safe, but car/truck/bus flicker at distance
+                     breaks tracks.
+  "vehicle_group"  — car/truck/bus are interchangeable, and
+                     bicycle/motorcycle are interchangeable. All other
+                     classes are strict. Default — balances safety with
+                     COCO's known confusables.
+  "any"            — class is ignored during matching. Risks cross-class
+                     ID swaps when two different objects overlap; only use
+                     on scenes dominated by a single class family.
+
 Output contract:
   `update(boxes)` receives a list of dicts `{'xyxy':[x1,y1,x2,y2],
   'score':float, 'cls':int}` (xyxy in [0,1] frame-normalized) and returns
@@ -26,6 +38,34 @@ from __future__ import annotations
 from typing import List, Optional
 
 import numpy as np
+
+
+# COCO-80 class groups treated as interchangeable when
+# match_mode == "vehicle_group". Every group member maps to the same
+# canonical key, so _class_match_ok() compares canonical keys instead of
+# raw class ids.
+#   2 car, 5 bus, 7 truck           — "4-wheel vehicle"
+#   1 bicycle, 3 motorcycle         — "2-wheel vehicle"
+# Everything else stays strict (class id == class id).
+_VEHICLE_GROUP_4W = frozenset({2, 5, 7})
+_VEHICLE_GROUP_2W = frozenset({1, 3})
+
+
+def _canonical_cls(cls_id: int, mode: str) -> int:
+    """Map a COCO class id to the canonical key used for matching.
+
+    In "strict" / unknown modes, returns cls_id unchanged. In
+    "vehicle_group", collapses the vehicle families to a single key per
+    family. In "any", returns a constant — all detections compare equal.
+    """
+    if mode == "any":
+        return -1
+    if mode == "vehicle_group":
+        if cls_id in _VEHICLE_GROUP_4W:
+            return -100  # sentinel — not a valid COCO id
+        if cls_id in _VEHICLE_GROUP_2W:
+            return -101
+    return cls_id
 
 
 def _iou_matrix(a_xyxy: np.ndarray, b_xyxy: np.ndarray) -> np.ndarray:
@@ -82,25 +122,56 @@ class ByteTrackLite:
                   0.3 is the ByteTrack default for high-confidence tracks
                   and works well for 30 fps CCTV (frame-to-frame motion
                   produces IoU > 0.5 for most pedestrian/vehicle speeds).
-        max_age:  number of frames a track is kept alive with no matching
-                  detection. At 30 fps, 30 frames ≈ 1 s of grace, which
-                  tolerates brief occlusion without re-issuing a fresh ID.
-        match_same_class_only:  if True, detections only match tracks that
-                  agree on COCO class id. Safer default — prevents a car
-                  and a truck from swapping IDs when they overlap.
+        max_age:  number of inference ticks a track is kept alive with no
+                  matching detection. Default 90 — generous enough that a
+                  brief occlusion (~3 s at 30 fps, longer when the plugin
+                  samples at lower rates) doesn't split a track into two
+                  events. Bump higher for slow-moving scenes; lower for
+                  crowded ones where stale tracks would snap onto
+                  unrelated detections.
+        match_mode:  class-constraint policy — see module docstring.
+                  "strict" | "vehicle_group" | "any". Default
+                  "vehicle_group" because COCO's car/truck/bus flicker is
+                  the most common cause of spurious track breaks.
     """
 
     def __init__(
         self,
         iou_thr: float = 0.3,
-        max_age: int = 30,
-        match_same_class_only: bool = True,
+        max_age: int = 90,
+        match_mode: str = "vehicle_group",
     ):
         self._next_id: int = 1
         self._tracks: List[_Track] = []
         self._iou_thr = float(iou_thr)
         self._max_age = int(max_age)
-        self._same_class = bool(match_same_class_only)
+        self._match_mode = self._normalize_mode(match_mode)
+
+    @staticmethod
+    def _normalize_mode(m: str) -> str:
+        m = (m or "").strip().lower()
+        if m in ("strict", "vehicle_group", "any"):
+            return m
+        return "vehicle_group"
+
+    def set_params(
+        self,
+        iou_thr: Optional[float] = None,
+        max_age: Optional[int] = None,
+        match_mode: Optional[str] = None,
+    ) -> None:
+        """Reconfigure without resetting live tracks.
+
+        Called from worker.py when the DeviceAgent pushes a new config.
+        Only the parameters provided are updated; existing tracks keep
+        their IDs so a settings change mid-stream doesn't split events.
+        """
+        if iou_thr is not None:
+            self._iou_thr = float(iou_thr)
+        if max_age is not None:
+            self._max_age = int(max_age)
+        if match_mode is not None:
+            self._match_mode = self._normalize_mode(match_mode)
 
     def live_count(self) -> int:
         """Number of tracks currently alive (including briefly-missed ones)."""
@@ -137,9 +208,21 @@ class ByteTrackLite:
         trk_cls = np.asarray([t.cls for t in self._tracks], dtype=np.int32)
 
         iou = _iou_matrix(det_xyxy, trk_xyxy)   # (n_det, n_trk)
-        if self._same_class:
-            # Disallow cross-class matches by driving IoU to 0.
-            class_match = (det_cls[:, None] == trk_cls[None, :])
+        if self._match_mode != "any":
+            # Disallow cross-class (or cross-group) matches by driving IoU
+            # to 0 on mismatched pairs. vehicle_group collapses COCO's
+            # confusable vehicle families to a single canonical key so
+            # e.g. (car ↔ truck) on the same physical object don't break
+            # the track.
+            det_canon = np.asarray(
+                [_canonical_cls(int(c), self._match_mode) for c in det_cls],
+                dtype=np.int32,
+            )
+            trk_canon = np.asarray(
+                [_canonical_cls(int(c), self._match_mode) for c in trk_cls],
+                dtype=np.int32,
+            )
+            class_match = (det_canon[:, None] == trk_canon[None, :])
             iou = iou * class_match.astype(np.float32)
 
         det_matched = [False] * n_det

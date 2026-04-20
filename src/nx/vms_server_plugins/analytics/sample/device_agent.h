@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <list>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -65,6 +66,13 @@ private:
     float m_conf = 0.30f;
     float m_iou = 0.50f;
     int m_frameSkip = 1;
+    // Tracker params pushed to the Python worker. Keep defaults in sync
+    // with tracker.py's ByteTrackLite defaults and the manifest's
+    // defaultValue fields in engine.cpp — drift between the three is a
+    // classic source of "works on fresh install, breaks after upgrade"
+    // bugs, so if you change one, grep the other two.
+    int m_trackMaxAge = 90;
+    std::string m_trackClassMatch = "vehicle_group";
     std::string m_runtime;  // populated from settingValue("runtime"); falls back to m_engine->runtime() if empty
     std::string m_device;   // same as above for "device"
     // Class name list the user ticked in the "Detect classes" CheckBoxGroup.
@@ -92,12 +100,22 @@ private:
     // needed today. **If inference is ever made async (e.g. a dispatched
     // worker pool) this map MUST move under a mutex.**
     //
-    // The map is not TTL-cleaned; at ~50 bytes/entry and tracker
-    // max_age=30 frames, a 24/7 camera observing ~100k distinct tracks
-    // caps at ≈5 MB. A future cleanup pass could tag entries with a
-    // last-seen packet index and sweep every N packets, or have the
-    // worker emit a `tracks_ended` list in its reply.
-    std::unordered_map<int, nx::sdk::Uuid> m_trackUuids;
+    // LRU eviction: an unbounded map would grow for the lifetime of the
+    // camera — at ~50 B/entry, a busy street cam producing 1 new track/s
+    // would hit ~5 MB/day. Bounded list + iterator-map gives O(1) lookup
+    // and O(1) eviction of the least-recently-seen entry. Cap sized for
+    // "hundreds of concurrent tracks + a few seconds of churn" which
+    // covers every realistic CCTV scene.
+    static constexpr size_t kTrackUuidCap = 4096;
+    struct TrackUuidEntry { int tid; nx::sdk::Uuid uuid; };
+    std::list<TrackUuidEntry> m_trackUuidLru;           // front = most-recent
+    std::unordered_map<int, std::list<TrackUuidEntry>::iterator> m_trackUuids;
+
+    // Returns the cached UUID for `tid`, or a fresh random UUID if this is
+    // the first time we've seen `tid`. Either way the entry is moved to
+    // the front of the LRU. `*outIsNew` is set to true iff a fresh UUID
+    // was allocated on this call (used only for observability logging).
+    nx::sdk::Uuid resolveTrackUuid(int tid, bool* outIsNew);
 };
 
 }}}} // namespace

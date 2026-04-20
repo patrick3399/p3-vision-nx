@@ -273,16 +273,36 @@ def serve(conn: socket.socket, peer: str) -> None:
                 # Blow away the pixel cache — any change here invalidates it.
                 poly_px_cache = {}
 
+                # Tracker config (optional keys — defaults applied on first
+                # config if absent). track_max_age is in inference ticks,
+                # not seconds; track_class_match ∈ {strict, vehicle_group,
+                # any}. See tracker.py for semantics.
+                track_max_age = msg.get("track_max_age", None)
+                track_class_match = msg.get("track_class_match", None)
+
                 # Lazy-init the per-camera tracker on first config. Config
                 # changes mid-stream (model swap, threshold change) don't
                 # reset the tracker — IoU continuity should survive parameter
                 # tweaks; only a client disconnect resets track IDs.
                 if tracker is None:
-                    tracker = ByteTrackLite(iou_thr=0.3, max_age=30)
+                    tracker = ByteTrackLite(
+                        iou_thr=0.3,
+                        max_age=int(track_max_age) if track_max_age is not None else 90,
+                        match_mode=str(track_class_match) if track_class_match is not None else "vehicle_group",
+                    )
+                else:
+                    # Existing tracker — push updated params without
+                    # wiping live track state (keeps IDs stable across
+                    # user Apply clicks).
+                    tracker.set_params(
+                        max_age=int(track_max_age) if track_max_age is not None else None,
+                        match_mode=str(track_class_match) if track_class_match is not None else None,
+                    )
 
                 log.info("config cam=%s runtime=%s device=%s model=%s "
                          "conf=%.2f iou=%.2f classes=%s "
-                         "roi=%s incl=%s excl=%s",
+                         "roi=%s incl=%s excl=%s "
+                         "trk_max_age=%s trk_match=%s",
                          cam, new_runtime, new_device, new_model,
                          conf_thr, iou_thr,
                          ("all" if class_filter_ids is None
@@ -290,7 +310,8 @@ def serve(conn: socket.socket, peer: str) -> None:
                                 else "none")),
                          (len(roi_norm) if roi_norm else 0),
                          (len(inclusive_norm) if inclusive_norm else 0),
-                         (len(exclusive_norm) if exclusive_norm else 0))
+                         (len(exclusive_norm) if exclusive_norm else 0),
+                         track_max_age, track_class_match)
 
                 # Swap adapter if runtime changed.
                 if new_runtime != current_runtime or adapter is None:

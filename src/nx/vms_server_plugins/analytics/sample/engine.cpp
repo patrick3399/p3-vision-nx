@@ -323,6 +323,26 @@ void Engine::buildManifest()
                       "minPoints": 3,
                       "maxPoints": 12 }
                 ]
+            },
+            {
+                "type": "GroupBox",
+                "caption": "Tracker",
+                "items":
+                [
+                    { "type": "SpinBox",
+                      "name": "trackMaxAge",
+                      "caption": "Track max age (frames)",
+                      "description": "Number of inference ticks a track is kept alive with no matching detection. Higher values bridge longer occlusions (a person walking behind a pillar) without splitting the event; lower values prevent stale tracks from snapping onto unrelated detections in crowded scenes. Default 90 ≈ 3 s at 30 fps; scales linearly with your Frame skip setting.",
+                      "defaultValue": 90,
+                      "minValue": 10,
+                      "maxValue": 300 },
+                    { "type": "ComboBox",
+                      "name": "trackClassMatch",
+                      "caption": "Class match policy",
+                      "description": "How strict class identity is enforced when associating a new detection with an existing track. 'strict' = COCO id must match exactly (safe but breaks on Car/Truck/Bus flicker at distance). 'vehicle_group' = car/truck/bus interchangeable AND bicycle/motorcycle interchangeable; other classes strict. 'any' = class ignored (risks cross-class ID swaps when objects overlap).",
+                      "defaultValue": "vehicle_group",
+                      "range": ["strict", "vehicle_group", "any"] }
+                ]
             }
         ]
     },
