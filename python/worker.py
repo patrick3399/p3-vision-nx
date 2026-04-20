@@ -53,10 +53,18 @@ log = logging.getLogger("worker")
 # Adapter factory table: module name + class name.
 # Imported lazily so a missing optional dep (torch, openvino, tensorrt) only
 # breaks the runtime that needs it, not the whole worker.
+#
+# License boundary:
+#   onnx / openvino / tensorrt adapters are permissively licensed (plugin
+#   stays MIT-clean).
+#   `pytorch` imports ultralytics (AGPL-3.0). The default deploy does NOT
+#   ship python/optional/adapter_pytorch.py — selecting the "pytorch"
+#   runtime in the Engine will fail with ImportError unless the user
+#   opts in to AGPL. See NOTICE section 4.
 _ADAPTER_TABLE = {
     "onnx":      ("adapter_onnx",     "OnnxAdapter"),
     "openvino":  ("adapter_openvino", "OpenvinoAdapter"),
-    "pytorch":   ("adapter_pytorch",  "PytorchAdapter"),
+    "pytorch":   ("adapter_pytorch",  "PytorchAdapter"),  # AGPL — optional
     "tensorrt":  ("adapter_tensorrt", "TensorrtAdapter"),
 }
 

@@ -1,0 +1,87 @@
+p3-vision-nx — Notices
+======================
+
+1. Non-affiliation
+------------------
+
+This project is an independent, community-authored analytics plugin. It is
+NOT developed, endorsed, sponsored, or certified by:
+
+  - Network Optix, Inc. or any Nx Witness / NxVMS / Metavision reseller
+  - Ultralytics, Inc. or any author of the YOLO model family
+  - Intel, NVIDIA, AMD, Apple, or any runtime / accelerator vendor
+
+All trademarks referenced in this repository (Nx Witness(TM), NxVMS(TM),
+Ultralytics(R), YOLO(R), OpenVINO(TM), TensorRT(TM), CoreML, CUDA(R), ROCm(TM),
+MLX) remain the property of their respective owners. Use in this repo is
+nominative fair use strictly for identifying compatibility and intended usage.
+
+2. File-level licensing exceptions
+----------------------------------
+
+The project as a whole is MIT-licensed (see LICENSE). The following files
+are derivatives of the Network Optix Metadata SDK sample plugin and remain
+under the Mozilla Public License 2.0 (file-level copyleft):
+
+  src/nx/vms_server_plugins/analytics/sample/plugin.cpp
+  src/nx/vms_server_plugins/analytics/sample/plugin.h
+  src/nx/vms_server_plugins/analytics/sample/engine.cpp
+  src/nx/vms_server_plugins/analytics/sample/engine.h
+  src/nx/vms_server_plugins/analytics/sample/device_agent.cpp
+  src/nx/vms_server_plugins/analytics/sample/device_agent.h
+  src/nx/vms_server_plugins/analytics/sample/coco80.cpp
+  src/nx/vms_server_plugins/analytics/sample/coco80.h
+
+Each of these files carries the header:
+
+    Copyright 2018-present Network Optix, Inc. Licensed under MPL 2.0.
+
+Modifications to these specific files must remain MPL-2.0 and be made
+available in source form. All other files in this repository — including
+all Python sources, build scripts, CMakeLists.txt, docs, and the new C++
+files env_probe.cpp/.h and ipc_client.cpp/.h — are MIT (see LICENSE).
+
+3. Third-party components (not vendored)
+----------------------------------------
+
+This plugin DOES NOT bundle any of the following. It builds or runs against
+them at the user's option:
+
+  NX Metadata SDK 6.0.1.39873 ..... MPL-2.0 (user downloads per SDK_PIN.txt)
+  onnxruntime ..................... MIT
+  OpenVINO ........................ Apache-2.0
+  opencv-python-headless .......... Apache-2.0
+  numpy ........................... BSD-3-Clause
+  PyTorch (optional) .............. BSD-3-Clause
+  TensorRT (optional) ............. NVIDIA proprietary EULA
+  Ultralytics (USER-SIDE ONLY) .... AGPL-3.0 — see section 4
+
+4. Ultralytics / AGPL-3.0 boundary
+----------------------------------
+
+The deployed plugin runtime DOES NOT import the `ultralytics` Python
+package. The default inference path is ONNX Runtime or OpenVINO, both
+permissively licensed, consuming pre-exported `.onnx` files placed in
+`/var/lib/p3-vision-nx/models/`.
+
+To produce those `.onnx` files from an Ultralytics YOLO checkpoint, run
+the Ultralytics CLI on your own development machine (NOT on the
+mediaserver). Doing so places the AGPL-3.0 obligations of Ultralytics on
+that development machine only; the exported weights are model output and
+are not considered a derivative work of the Ultralytics Python source.
+This mirrors the pattern used by Network Optix's own conversion tutorials
+at https://github.com/scailable/nxai-model-to-onnx.
+
+An OPTIONAL adapter that does import ultralytics at runtime is kept in
+`python/optional/adapter_pytorch.py`. If you choose to install and use it,
+your deployment becomes subject to AGPL-3.0 (network-service copyleft
+included). The default install in README.md does NOT install ultralytics
+and does NOT include this adapter.
+
+5. Dataset notice
+-----------------
+
+The 80 COCO-2017 class names in coco80.h/.cpp are factual labels from the
+COCO dataset (https://cocodataset.org/), licensed under Creative Commons
+Attribution 4.0. Class-name strings themselves are not copyrightable in
+most jurisdictions.

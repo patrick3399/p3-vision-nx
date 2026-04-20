@@ -1,4 +1,4 @@
-// Copyright 2026 patrick. Licensed under MPL 2.0.
+// Copyright 2026 Patrick3399. Licensed under MIT (see LICENSE in repo root).
 
 #pragma once
 

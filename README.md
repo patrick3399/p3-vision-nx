@@ -6,13 +6,16 @@ Self-hosted, multi-runtime computer-vision analytics plugin for Nx Witness
 |                       | NX AI Manager (`nxai_plugin`)   | P3 Vision (this project)         |
 | ---                   | ---                             | ---                              |
 | Model distribution    | cloud upload / download          | local files, no cloud            |
-| Runtime backends      | ONNX (CPU / OpenVINO / CUDA / JetPack) | ONNX, PyTorch (CPU/CUDA/MPS/XPU), TensorRT, OpenVINO, ROCm, CoreML, MLX *(planned)* |
+| Runtime backends (default) | ONNX (CPU / OpenVINO / CUDA / JetPack) | ONNX + OpenVINO (AGPL-clean)     |
+| Runtime backends (opt-in) | —                             | PyTorch/TensorRT/ROCm/CoreML/MLX *(AGPL-aware, planned)* |
 | NMS                   | baked into ONNX graph            | optional — end-to-end YOLO26 supported |
-| Ecosystem alignment   | NX-internal                      | Ultralytics YOLO                 |
+| Model source          | NX cloud / convert tutorials     | user-exported ONNX (Ultralytics CLI on dev machine) |
 | UX (ROI / mask / class filter) | —                        | aligned with NX AI Manager conventions |
 | Pipeline stacking     | supported                        | planned                          |
 
-License: MPL-2.0. See `LICENSE`.
+License: MIT for all user-authored files. NX SDK-derived files (plugin.cpp,
+engine.cpp, device_agent.cpp, coco80.*) retain their MPL-2.0 headers per
+NX's sample license. See `LICENSE` and `NOTICE`.
 
 ---
 
@@ -65,17 +68,49 @@ manifest from a previous build.
 
 ## Python venv setup (one-time)
 
+Default install — AGPL-clean, ONNX + OpenVINO only:
+
 ```
 sudo python3 -m venv /opt/p3-vision-nx/venv
 sudo /opt/p3-vision-nx/venv/bin/pip install --upgrade pip
 sudo /opt/p3-vision-nx/venv/bin/pip install \
-    numpy opencv-python-headless onnxruntime openvino ultralytics
+    numpy opencv-python-headless onnxruntime openvino
 sudo chown -R networkoptix:networkoptix /opt/p3-vision-nx/venv
 ```
 
 TensorRT / ROCm / CoreML / MLX extras install only on matching hardware.
 `python/env_probe.py` auto-detects which backends are usable and exposes
 them in the Engine's runtime picker.
+
+**Do NOT `pip install ultralytics` on the mediaserver** unless you
+explicitly want the entire plugin deployment to fall under AGPL-3.0.
+See `NOTICE` section 4 and `python/optional/adapter_pytorch.py`.
+
+---
+
+## Exporting YOLO weights (run on your dev machine, NOT the mediaserver)
+
+The plugin consumes `.onnx` files from `/var/lib/p3-vision-nx/models/`.
+Produce them on your own development workstation:
+
+```
+# On a separate dev machine, in a throwaway venv:
+python3 -m venv /tmp/yolo-export
+source /tmp/yolo-export/bin/activate
+pip install ultralytics
+yolo export model=yolo26n.pt format=onnx imgsz=640 opset=15 simplify=true
+
+# Copy the produced yolo26n.onnx to the mediaserver:
+scp yolo26n.onnx user@mediaserver:/tmp/
+ssh user@mediaserver "sudo install -o networkoptix -g networkoptix -m 644 \
+    /tmp/yolo26n.onnx /var/lib/p3-vision-nx/models/"
+```
+
+This mirrors the pattern in Network Optix's own conversion tutorials:
+https://github.com/scailable/nxai-model-to-onnx . Ultralytics AGPL-3.0
+obligations attach to your dev machine where the export runs; the exported
+ONNX weights are model output and do not carry AGPL into the plugin
+runtime on the mediaserver.
 
 ---
 

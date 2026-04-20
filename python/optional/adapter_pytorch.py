@@ -1,5 +1,27 @@
 """PyTorch adapter — uses Ultralytics YOLO.
 
+================================================================
+  OPTIONAL ADAPTER — AGPL-3.0 BOUNDARY WARNING
+================================================================
+This file imports the `ultralytics` package, which is licensed
+AGPL-3.0. Installing and running this adapter inside the
+p3-vision-nx deployment causes the resulting combined work to
+fall under AGPL-3.0, including the "network service" copyleft
+trigger.
+
+The default p3-vision-nx install path (README.md) DOES NOT install
+ultralytics and DOES NOT load this adapter. The plugin is MIT-
+licensed and AGPL-clean by default, consuming pre-exported ONNX
+files via adapter_onnx.py or adapter_openvino.py.
+
+To produce those ONNX files, run the Ultralytics CLI on your own
+development machine (see README.md "Exporting YOLO weights"). That
+keeps AGPL obligations on the export machine and off the plugin.
+
+Only deploy this file to the mediaserver if you intend to comply
+with AGPL-3.0 for the entire plugin deployment.
+================================================================
+
 Accepts any format Ultralytics understands (.pt primarily, also .onnx/.engine
 if torch backend can delegate; but prefer matching adapters per format).
 
